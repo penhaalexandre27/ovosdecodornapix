@@ -12,19 +12,14 @@ body{margin:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,"S
 .card{max-width:430px;margin:20px auto;background:white;border-radius:22px;padding:26px 20px;box-shadow:0 8px 30px rgba(0,0,0,.08);text-align:center}
 h1{font-size:24px;margin:4px 0 6px}
 .sub{color:#6b7280;margin:0 0 18px}
-.price{font-size:34px;font-weight:800;margin:10px 0 18px}
-#qrcode{display:flex;justify-content:center;margin:8px auto 18px}
+#qrcode{display:flex;justify-content:center;margin:18px auto}
 #qrcode img{border:8px solid white}
 .label{font-weight:700;margin:12px 0 6px}
 .pixbox{background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:10px;font-size:12px;word-break:break-all;color:#4b5563;text-align:left}
 button{border:0;border-radius:12px;padding:14px 18px;font-size:16px;font-weight:700;cursor:pointer;width:100%;margin-top:10px}
 .copy{background:#111827;color:white}
-.review{background:#16a34a;color:white;text-decoration:none;display:block}
-.timer{margin:18px 0 4px;font-size:15px;color:#6b7280}
-.timer strong{color:#111827;font-size:20px}
+.review{background:#16a34a;color:white;text-decoration:none;display:block;margin-top:15px;border-radius:12px;padding:14px 18px;font-size:16px;font-weight:700}
 .note{font-size:12px;color:#9ca3af;margin-top:16px;line-height:1.4}
-.hidden{display:none}
-.success{font-size:22px;font-weight:800;margin:10px 0 5px}
 </style>
 </head>
 <body>
@@ -32,17 +27,12 @@ button{border:0;border-radius:12px;padding:14px 18px;font-size:16px;font-weight:
   <div style="font-size:42px">🥚</div>
   <h1>Pagamento via Pix</h1>
   <p class="sub">Ovos de Codorna Frescos</p>
-  <div class="price">R$ 12,00</div>
 
   <div id="qrcode"></div>
 
   <div class="label">Pix Copia e Cola</div>
-  <div class="pixbox" id="pix">00020126370014BR.GOV.BCB.PIX0115011102043592360520400005303986540512.005802BR5915OVOS DE CODORNA6008SAO LUIS62070503***63044E40</div>
+  <div class="pixbox" id="pix"></div>
   <button class="copy" onclick="copiarPix()">Copiar código Pix</button>
-
-  <div class="timer">Após o pagamento, você será direcionado para a avaliação em<br>
-    <strong><span id="seg">30</span> segundos</strong>
-  </div>
 
   <a class="review" href="https://g.page/r/CbcGfXe1us2JEBM/review">⭐ Avaliar agora</a>
 
@@ -50,35 +40,73 @@ button{border:0;border-radius:12px;padding:14px 18px;font-size:16px;font-weight:
 </div>
 
 <script>
-const reviewUrl = 'https://g.page/r/CbcGfXe1us2JEBM/review';
-const pix = '00020126370014BR.GOV.BCB.PIX0115011102043592360520400005303986540512.005802BR5915OVOS DE CODORNA6008SAO LUIS62070503***63044E40';
+// Função para gerar o código Pix EMV oficial com CRC16 (sem valor fixo)
+function gerarPixPayload(chave, nome, cidade, valor) {
+  function formatField(id, val) {
+    const len = val.length.toString().padStart(2, '0');
+    return `${id}${len}${val}`;
+  }
 
+  const gui = formatField('00', 'BR.GOV.BCB.PIX');
+  const key = formatField('01', chave);
+  const merchantAccount = formatField('26', gui + key);
+
+  const payloadSemCRC = 
+    '000201' +
+    merchantAccount +
+    formatField('52', '0000') +
+    formatField('53', '986') +
+    (valor ? formatField('54', parseFloat(valor).toFixed(2)) : '') +
+    formatField('58', 'BR') +
+    formatField('59', nome.substring(0, 25)) +
+    formatField('60', cidade.substring(0, 15)) +
+    formatField('62', formatField('05', '***')) +
+    '6304';
+
+  function crc16(str) {
+    let crc = 0xFFFF;
+    for (let i = 0; i < str.length; i++) {
+      crc ^= str.charCodeAt(i) << 8;
+      for (let j = 0; j < 8; j++) {
+        if ((crc & 0x8000) !== 0) {
+          crc = ((crc << 1) ^ 0x1021) & 0xFFFF;
+        } else {
+          crc = (crc << 1) & 0xFFFF;
+        }
+      }
+    }
+    return crc.toString(16).toUpperCase().padStart(4, '0');
+  }
+
+  return payloadSemCRC + crc16(payloadSemCRC);
+}
+
+// Configuração dos dados Pix com valor livre
+const chaveCpf = '02043592360';
+const nomeRecebedor = 'OVOS DE CODORNA';
+const cidadeRecebedor = 'SAO LUIS';
+
+const payloadPix = gerarPixPayload(chaveCpf, nomeRecebedor, cidadeRecebedor, null);
+
+// Exibe a string do Pix Copia e Cola na tela
+document.getElementById("pix").textContent = payloadPix;
+
+// Gera o QR Code com o payload formatado
 new QRCode(document.getElementById("qrcode"), {
-  text: pix,
+  text: payloadPix,
   width: 220,
   height: 220,
   correctLevel: QRCode.CorrectLevel.M
 });
 
 function copiarPix(){
-  navigator.clipboard.writeText(pix).then(() => {
+  navigator.clipboard.writeText(payloadPix).then(() => {
     const b = document.querySelector(".copy");
     const old = b.textContent;
     b.textContent = "✓ Código copiado!";
     setTimeout(() => b.textContent = old, 1800);
   });
 }
-
-let segundos = 30;
-const el = document.getElementById("seg");
-const intervalo = setInterval(() => {
-  segundos--;
-  el.textContent = segundos;
-  if (segundos <= 0) {
-    clearInterval(intervalo);
-    window.location.href = reviewUrl;
-  }
-}, 1000);
 </script>
 </body>
 </html>
